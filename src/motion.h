@@ -3,17 +3,15 @@
 #include <array>
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
-
-struct Motion {
-  std::array<double, 2> translation;
-  std::array<std::array<double, 2>, 2> rotation;
-};
 
 class Point {
  public:
+  Point() = default;
   Point(double x, double y);
 
+  Point operator+(const Point& rhs) const;
   Point& operator+=(const Point& rhs);
   Point operator-() const;
   Point& operator-=(const Point& rhs);
@@ -24,12 +22,32 @@ class Point {
   double x() const;
   double y() const;
 
+  std::string ToString() const;
+
  private:
   void invalidate_cache() const;
 
   double x_, y_;
   mutable std::optional<double> len_;
   mutable std::optional<double> angle_;
+};
+
+class Rotation {
+ public:
+  Rotation() = default;
+  Rotation(double angle);
+  Point apply(const Point& point) const;
+  double angle() const;
+
+ private:
+  double angle_;
+};
+
+struct Motion {
+  Motion() = default;
+  Motion(const Point& p, const Rotation& r) : translation(p), rotation(r) {}
+  Point translation;
+  Rotation rotation;
 };
 
 class EuclideanMotionSolver {
@@ -44,7 +62,7 @@ class EuclideanMotionSolver {
   }
 
   template <typename T>
-  std::optional<Motion> predict(T&& points) {
+  std::vector<Motion> predict(T&& points) {
     dst_points = std::make_unique<Points>(std::forward<T>(points));
     return predict_impl();
   }
@@ -52,7 +70,7 @@ class EuclideanMotionSolver {
   static Points read_points(const std::string& path);
 
  private:
-  std::optional<Motion> predict_impl();
+  std::vector<Motion> predict_impl();
 
   std::unique_ptr<Points> src_points;
   std::unique_ptr<Points> dst_points;

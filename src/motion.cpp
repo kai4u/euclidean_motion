@@ -5,11 +5,16 @@
 #include <fstream>
 #include <memory>
 #include <optional>
+#include <sstream>
 #include <vector>
+
+#include <iostream>
 
 #include "utils.h"
 
 namespace {
+
+constexpr double EPS = 1e-9;
 
 Point cloud_center(const std::vector<Point>& points) {
   long double x = 0, y = 0;
@@ -30,9 +35,37 @@ void move_to_center(std::vector<Point>& points) {
   }
 }
 
+double unify_angle(double angle) {
+  if (angle > M_PI + EPS) {
+    return angle - 2 * M_PI;
+  } else if (angle < -M_PI + EPS) {
+    return angle + 2 * M_PI;
+  }
+  return angle;
+}
+
+std::vector<double> filter_by_radius(const EuclideanMotionSolver::Points& v,
+                                     size_t i) {
+  std::vector<double> res;
+
+  for (size_t j = i + 1;
+       j < v.size() && std::abs(v[j].len() - v[i].len()) < EPS; ++j) {
+    res.emplace_back(unify_angle(v[j].angle() - v[j - 1].angle()));
+  }
+  res.emplace_back(unify_angle(v[i].angle() - v[i + res.size()].angle()));
+
+  return res;
+}
+
 }  // namespace
 
 Point::Point(double x, double y) : x_(x), y_(y) {}
+
+Point Point::operator+(const Point& rhs) const {
+  Point res(*this);
+  res.operator+=(rhs);
+  return res;
+}
 
 Point& Point::operator+=(const Point& rhs) {
   this->x_ += rhs.x_;
@@ -83,9 +116,26 @@ double Point::angle() const {
   return angle_.value();
 }
 
+std::string Point::ToString() const {
+  std::stringstream ss;
+  ss << "[" << x_ << ", " << y_ << "]";
+  return ss.str();
+}
+
 void Point::invalidate_cache() const {
   angle_ = std::nullopt;
   len_ = std::nullopt;
+}
+
+Rotation::Rotation(double angle) : angle_(angle) {}
+
+Point Rotation::apply(const Point& point) const {
+  return {std::cos(angle_) * point.x() - std::sin(angle_) * point.y(),
+          std::sin(angle_) * point.x() + std::cos(angle_) * point.y()};
+}
+
+double Rotation::angle() const {
+  return angle_;
 }
 
 // static
@@ -107,21 +157,19 @@ EuclideanMotionSolver::Points EuclideanMotionSolver::read_points(
   return res;
 }
 
-std::optional<Motion> EuclideanMotionSolver::predict_impl() {
+std::vector<Motion> EuclideanMotionSolver::predict_impl() {
   auto& src = *src_points;
   auto& dst = *dst_points;
 
   if (src.size() == 0 || src.size() != dst.size()) {
-    return std::nullopt;
+    return {};
   }
 
-  // TODO: fix huinya.
-  const auto res_motion = cloud_center(dst) - cloud_center(src);
+  const auto src_center = cloud_center(src);
+  const auto dst_center = cloud_center(dst);
 
   move_to_center(src);
   move_to_center(dst);
-
-  const double EPS = 1e-9;
 
   auto cmp = [&](const auto& lhs, const auto& rhs) {
     return lhs.len() < rhs.len() - EPS ||
@@ -133,27 +181,15 @@ std::optional<Motion> EuclideanMotionSolver::predict_impl() {
 
   std::vector<double> possible_rotations;
   for (size_t i = 0; i < src.size();) {
-    std::vector<double> src_angles, dst_angles;
-
-    // TODO: function + unify angles.
-    for (size_t src_j = i + 1;
-         src_j < src.size() && std::abs(src[src_j].len() - src[i].len()) < EPS;
-         ++src_j) {
-      src_angles.emplace_back(src[src_j].angle() - src[src_j - 1].angle());
+    if (std::abs(src[i].len() - dst[i].len()) > EPS) {
+      return {};
     }
-    src_angles.emplace_back(src[i].angle() -
-                            src[i + src_angles.size()].angle());
 
-    for (size_t dst_j = i + 1;
-         dst_j < dst.size() && std::abs(dst[dst_j].len() - dst[i].len()) < EPS;
-         ++dst_j) {
-      dst_angles.emplace_back(dst[dst_j].angle() - dst[dst_j - 1].angle());
-    }
-    dst_angles.emplace_back(dst[i].angle() -
-                            dst[i + dst_angles.size()].angle());
+    auto src_angles = filter_by_radius(src, i);
+    auto dst_angles = filter_by_radius(dst, i);
 
     if (src_angles.size() != dst_angles.size()) {
-      return std::nullopt;
+      return {};
     }
 
     const size_t len = src_angles.size();
@@ -161,23 +197,33 @@ std::optional<Motion> EuclideanMotionSolver::predict_impl() {
     const auto shifts =
         utils::calc_shifts(std::move(src_angles), std::move(dst_angles));
     if (shifts.empty()) {
-      return std::nullopt;
+      return {};
     }
 
     std::vector<double> rotations;
     rotations.reserve(shifts.size());
     for (const size_t j : shifts) {
-      rotations.emplace_back(dst[i + j].angle() - src[i].angle());
+      rotations.emplace_back(unify_angle(dst[i + j].angle() - src[i].angle()));
     }
 
     utils::update_common_rotations(possible_rotations, rotations);
 
     if (possible_rotations.empty()) {
-      return std::nullopt;
+      return {};
     }
 
     i += len;
   }
-  return Motion{{res_motion.x(), res_motion.y()},
-                {std::array{possible_rotations[0], 0.}, std::array{0., 0.}}};
+
+  std::cout << "Possible rotations count: " << possible_rotations.size()
+            << std::endl;
+
+  std::vector<Motion> res;
+  for (const auto angle : possible_rotations) {
+    Rotation rotation(angle);
+    const auto translation = dst_center - rotation.apply(src_center);
+    res.emplace_back(translation, rotation);
+  }
+
+  return res;
 }

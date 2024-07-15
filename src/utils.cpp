@@ -1,8 +1,10 @@
 #include "utils.h"
 
 #include <cmath>
+#include <iostream>
 
 namespace utils {
+
 std::vector<size_t> calc_shifts(std::vector<double>&& src_angles,
                                 std::vector<double>&& dst_angles) {
   std::vector<size_t> res;
@@ -13,8 +15,10 @@ std::vector<size_t> calc_shifts(std::vector<double>&& src_angles,
 
   for (size_t i = 0; i + src_angles.size() < dst_angles.size(); ++i) {
     size_t j = 0;
-    for (; std::abs(src_angles[j] - dst_angles[i + j]) < 1e-9; j++)
-      ;
+    while (j < src_angles.size() &&
+           std::abs(src_angles[j] - dst_angles[i + j]) < 1e-9) {
+      j++;
+    }
     if (j == src_angles.size()) {
       res.emplace_back(i);
     }

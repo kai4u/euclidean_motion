@@ -5,25 +5,9 @@
 namespace {
 
 std::ostream& operator<<(std::ostream& os, const Motion& motion) {
-  os << "Translation: ";
-  auto print_array = [&os](const auto& array) {
-    os << "[";
-    for (size_t i = 0; i < array.size(); ++i) {
-      os << array[i] << (i + 1 == array.size() ? "" : ", ");
-    }
-    os << "]";
-  };
+  os << "Translation: " << motion.translation.ToString() << std::endl;
+  os << "Rotation: " << motion.rotation.angle() << std::endl;
 
-  print_array(motion.translation);
-
-  os << "\nRotation: [";
-  for (size_t i = 0; i < motion.rotation.size(); ++i) {
-    print_array(motion.rotation[i]);
-    if (i + 1 < motion.rotation.size()) {
-      os << ", ";
-    }
-  }
-  os << "]\n";
   return os;
 }
 
@@ -42,10 +26,12 @@ int main(int argc, char** argv) {
   solver.train(src_set);
   auto res = solver.predict(std::move(dst_set));
 
-  if (!res.has_value()) {
+  if (res.empty()) {
     std::cout << "Ain't no motion between these sets of points." << std::endl;
   } else {
-    std::cout << res.value();
+    for (const auto& motion : res) {
+      std::cout << motion << std::endl;
+    }
   }
 
   return 0;
