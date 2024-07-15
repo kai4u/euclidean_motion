@@ -22,21 +22,22 @@ std::vector<size_t> calc_shifts(std::vector<double>&& src_angles,
   return res;
 }
 
-std::vector<double> common_rotations(std::vector<double>&& rotations,
-                                     std::vector<double>&& current_rotations) {
-  if (rotations.empty()) {
-    return current_rotations;
+void update_common_rotations(std::vector<double>& incremented_rotations,
+                             const std::vector<double>& current_rotations) {
+  if (incremented_rotations.empty()) {
+    incremented_rotations = current_rotations;
+    return;
   }
 
   std::vector<double> res;
-  for (const auto& rotation : rotations) {
+  for (const auto& rotation : incremented_rotations) {
     for (const auto& current : current_rotations) {
       if (std::abs(rotation - current) < 1e-9) {
         res.emplace_back(rotation);
       }
     }
   }
-  return res;
+  incremented_rotations = std::move(res);
 }
 
 }  // namespace utils

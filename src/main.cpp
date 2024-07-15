@@ -44,7 +44,6 @@ int main(int argc, char** argv) {
 
   if (!res.has_value()) {
     std::cout << "Ain't no motion between these sets of points." << std::endl;
-    ;
   } else {
     std::cout << res.value();
   }

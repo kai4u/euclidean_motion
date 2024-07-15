@@ -170,8 +170,7 @@ std::optional<Motion> EuclideanMotionSolver::predict_impl() {
       rotations.emplace_back(dst[i + j].angle() - src[i].angle());
     }
 
-    possible_rotations = utils::common_rotations(std::move(possible_rotations),
-                                                 std::move(rotations));
+    utils::update_common_rotations(possible_rotations, rotations);
 
     if (possible_rotations.empty()) {
       return std::nullopt;
