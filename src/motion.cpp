@@ -149,12 +149,12 @@ EuclideanMotionSolver::Points EuclideanMotionSolver::read_points(
     const std::string& path) {
   std::ifstream fs(path);
 
-  int num;
+  size_t num;
   fs >> num;
 
   Points res;
   res.reserve(num);
-  for (int i = 0; i < num; ++i) {
+  for (size_t i = 0; i < num; ++i) {
     double x, y;
     fs >> x >> y;
     res.emplace_back(x, y);
