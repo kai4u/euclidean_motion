@@ -3,12 +3,11 @@
 #include <algorithm>
 #include <cmath>
 #include <fstream>
+#include <iostream>
 #include <memory>
 #include <optional>
 #include <sstream>
 #include <vector>
-
-#include <iostream>
 
 #include "utils.h"
 
@@ -46,13 +45,20 @@ double unify_angle(double angle) {
 
 std::vector<double> filter_by_radius(const EuclideanMotionSolver::Points& v,
                                      size_t i) {
-  std::vector<double> res;
-
-  for (size_t j = i + 1;
-       j < v.size() && std::abs(v[j].len() - v[i].len()) < EPS; ++j) {
-    res.emplace_back(unify_angle(v[j].angle() - v[j - 1].angle()));
+  EuclideanMotionSolver::Points tmp;
+  for (size_t j = i; j < v.size() && v[j].len() - v[i].len() < EPS; ++j) {
+    tmp.push_back(v[j]);
   }
-  res.emplace_back(unify_angle(v[i].angle() - v[i + res.size()].angle()));
+  auto cmp = [](const auto& lhs, const auto& rhs) {
+    return lhs.angle() < rhs.angle();
+  };
+  std::sort(tmp.begin(), tmp.end(), cmp);
+
+  std::vector<double> res;
+  for (size_t j = 0; j < tmp.size(); ++j) {
+    res.emplace_back(
+        unify_angle(tmp[(j + 1) % tmp.size()].angle() - tmp[j].angle()));
+  }
 
   return res;
 }
@@ -171,9 +177,8 @@ std::vector<Motion> EuclideanMotionSolver::predict_impl() {
   move_to_center(src);
   move_to_center(dst);
 
-  auto cmp = [&](const auto& lhs, const auto& rhs) {
-    return lhs.len() < rhs.len() - EPS ||
-           (lhs.len() < rhs.len() + EPS && (lhs.angle() < rhs.angle()));
+  auto cmp = [](const auto& lhs, const auto& rhs) {
+    return lhs.len() < rhs.len();
   };
 
   std::sort(src.begin(), src.end(), cmp);
@@ -194,8 +199,7 @@ std::vector<Motion> EuclideanMotionSolver::predict_impl() {
 
     const size_t len = src_angles.size();
 
-    const auto shifts =
-        utils::calc_shifts(std::move(src_angles), std::move(dst_angles));
+    const auto shifts = utils::find_all_cyclic_shifts(src_angles, dst_angles);
     if (shifts.empty()) {
       return {};
     }
@@ -206,7 +210,12 @@ std::vector<Motion> EuclideanMotionSolver::predict_impl() {
       rotations.emplace_back(unify_angle(dst[i + j].angle() - src[i].angle()));
     }
 
-    utils::update_common_rotations(possible_rotations, rotations);
+    if (possible_rotations.empty()) {
+      possible_rotations = std::move(rotations);
+    } else {
+      possible_rotations =
+          utils::find_intersection(possible_rotations, rotations);
+    }
 
     if (possible_rotations.empty()) {
       return {};
